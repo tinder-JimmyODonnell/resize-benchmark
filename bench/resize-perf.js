@@ -11,12 +11,6 @@ const gm = require('gm');
 const imagemagick = require('imagemagick');
 const jimp = require('jimp');
 const sharp = require('sharp');
-let imagemagickNative;
-try {
-  imagemagickNative = require('imagemagick-native');
-} catch (err) {
-  console.log('Excluding imagemagick-native');
-}
 let lwip;
 try {
   lwip = require('lwip');
@@ -24,15 +18,13 @@ try {
   console.log('Excluding lwip');
 }
 
-// bonus: guetzli
-const cp = require('child_process');
-const guetzli = require('guetzli');
-
+// test images
 const fixtures = require('../fixtures');
 
-const width = 200;
-const height = 200;
-const quality_factor = 100;
+//
+const width = 100;
+const height = 100;
+const quality_factor = 100; // don't reduce quality yet
 
 // Disable libvips cache to ensure tests are as fair as they can be
 sharp.cache(false);
@@ -46,27 +38,7 @@ async.series({
     const inputJpgBuffer = fs.readFileSync(fixtures.inputJpg);
     const jpegSuite = new Benchmark.Suite('jpeg');
     // jimp
-    jpegSuite.add('jimp-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        jimp.read(inputJpgBuffer, function (err, image) {
-          if (err) {
-            throw err;
-          } else {
-            image
-              .resize(width, height)
-              .quality(quality_factor)
-              .getBuffer(jimp.MIME_JPEG, function (err) {
-                if (err) {
-                  throw err;
-                } else {
-                  deferred.resolve();
-                }
-              });
-          }
-        });
-      }
-    }).add('jimp-file-file', {
+    jpegSuite.add('jimp-file-file', {
       defer: true,
       fn: function (deferred) {
         jimp.read(fixtures.inputJpg, function (err, image) {
@@ -109,27 +81,6 @@ async.series({
             });
           });
         }
-      }).add('lwip-buffer-buffer', {
-        defer: true,
-        fn: function (deferred) {
-          lwip.open(inputJpgBuffer, 'jpg', function (err, image) {
-            if (err) {
-              throw err;
-            }
-            image.resize(width, height, 'lanczos', function (err, image) {
-              if (err) {
-                throw err;
-              }
-              image.toBuffer('jpg', {quality: quality_factor}, function (err, buffer) {
-                if (err) {
-                  throw err;
-                }
-                assert.notStrictEqual(null, buffer);
-                deferred.resolve();
-              });
-            });
-          });
-        }
       });
     }
     // imagemagick
@@ -153,62 +104,8 @@ async.series({
         });
       }
     });
-    // imagemagick-native
-    if (typeof imagemagickNative !== 'undefined') {
-      jpegSuite.add('imagemagick-native-buffer-buffer', {
-        defer: true,
-        fn: function (deferred) {
-          imagemagickNative.convert({
-            srcData: inputJpgBuffer,
-            quality: quality_factor,
-            width: width,
-            height: height,
-            format: 'JPEG',
-            filter: 'Lanczos'
-          }, function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-        }
-      });
-    }
     // gm
-    jpegSuite.add('gm-buffer-file', {
-      defer: true,
-      fn: function (deferred) {
-        gm(inputJpgBuffer)
-          .filter('Lanczos')
-          .resize(width, height)
-          .quality(quality_factor)
-          .write(fixtures.outputJpg, function (err) {
-            if (err) {
-              throw err;
-            } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('gm-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        gm(inputJpgBuffer)
-          .filter('Lanczos')
-          .resize(width, height)
-          .quality(quality_factor)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('gm-file-file', {
+    jpegSuite.add('gm-file-file', {
       defer: true,
       fn: function (deferred) {
         gm(fixtures.inputJpg)
@@ -219,56 +116,13 @@ async.series({
             if (err) {
               throw err;
             } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('gm-file-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        gm(fixtures.inputJpg)
-          .filter('Lanczos')
-          .resize(width, height)
-          .quality(quality_factor)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
               deferred.resolve();
             }
           });
       }
     });
     // sharp
-    jpegSuite.add('sharp-buffer-file', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputJpgBuffer)
-          .resize(width, height)
-          .toFile(fixtures.outputJpg, function (err) {
-            if (err) {
-              throw err;
-            } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputJpgBuffer)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-file-file', {
+    jpegSuite.add('sharp-file-file', {
       defer: true,
       fn: function (deferred) {
         sharp(fixtures.inputJpg)
@@ -279,43 +133,6 @@ async.series({
             } else {
               deferred.resolve();
             }
-          });
-      }
-    }).add('sharp-stream-stream', {
-      defer: true,
-      fn: function (deferred) {
-        const readable = fs.createReadStream(fixtures.inputJpg);
-        const writable = fs.createWriteStream(fixtures.outputJpg);
-        writable.on('finish', function () {
-          deferred.resolve();
-        });
-        const pipeline = sharp()
-          .resize(width, height);
-        readable.pipe(pipeline).pipe(writable);
-      }
-    }).add('sharp-file-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(fixtures.inputJpg)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-promise', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputJpgBuffer)
-          .resize(width, height)
-          .toBuffer()
-          .then(function (buffer) {
-            assert.notStrictEqual(null, buffer);
-            deferred.resolve();
           });
       }
     }).on('cycle', function (event) {
@@ -329,26 +146,7 @@ async.series({
     const inputPngBuffer = fs.readFileSync(fixtures.inputPng);
     const pngSuite = new Benchmark.Suite('png');
     // jimp
-    pngSuite.add('jimp-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        jimp.read(inputPngBuffer, function (err, image) {
-          if (err) {
-            throw err;
-          } else {
-            image
-              .resize(width, height)
-              .getBuffer(jimp.MIME_PNG, function (err) {
-                if (err) {
-                  throw err;
-                } else {
-                  deferred.resolve();
-                }
-              });
-          }
-        });
-      }
-    }).add('jimp-file-file', {
+    pngSuite.add('jimp-file-file', {
       defer: true,
       fn: function (deferred) {
         jimp.read(fixtures.inputPng, function (err, image) {
@@ -370,10 +168,10 @@ async.series({
     });
     // lwip
     if (typeof lwip !== 'undefined') {
-      pngSuite.add('lwip-buffer-buffer', {
+      pngSuite.add('lwip-file-file', {
         defer: true,
         fn: function (deferred) {
-          lwip.open(inputPngBuffer, 'png', function (err, image) {
+          lwip.open(fixtures.inputPng, function (err, image) {
             if (err) {
               throw err;
             }
@@ -381,19 +179,17 @@ async.series({
               if (err) {
                 throw err;
               }
-              image.toBuffer('png', function (err, buffer) {
+              image.writeFile(fixtures.outputPng, {quality: quality_factor}, function (err) {
                 if (err) {
                   throw err;
                 }
-                assert.notStrictEqual(null, buffer);
                 deferred.resolve();
               });
             });
           });
         }
-      });
+      })
     }
-    // ======== PNG SUITE ========
     // imagemagick
     pngSuite.add('imagemagick-file-file', {
       defer: true,
@@ -413,22 +209,6 @@ async.series({
         });
       }
     });
-    // imagemagick-native
-    if (typeof imagemagickNative !== 'undefined') {
-      pngSuite.add('imagemagick-native-buffer-buffer', {
-        defer: true,
-        fn: function (deferred) {
-          imagemagickNative.convert({
-            srcData: inputPngBuffer,
-            width: width,
-            height: height,
-            format: 'PNG',
-            filter: 'Lanczos'
-          });
-          deferred.resolve();
-        }
-      });
-    }
     // gm
     pngSuite.add('gm-file-file', {
       defer: true,
@@ -444,51 +224,9 @@ async.series({
             }
           });
       }
-    }).add('gm-file-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        gm(fixtures.inputPng)
-          .filter('Lanczos')
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
     });
     // sharp
-    pngSuite.add('sharp-buffer-file', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputPngBuffer)
-          .resize(width, height)
-          .toFile(fixtures.outputPng, function (err) {
-            if (err) {
-              throw err;
-            } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputPngBuffer)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-file-file', {
+    pngSuite.add('sharp-file-file', {
       defer: true,
       fn: function (deferred) {
         sharp(fixtures.inputPng)
@@ -497,20 +235,6 @@ async.series({
             if (err) {
               throw err;
             } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-file-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(fixtures.inputPng)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
               deferred.resolve();
             }
           });
@@ -518,7 +242,7 @@ async.series({
     }).add('sharp-progressive', {
       defer: true,
       fn: function (deferred) {
-        sharp(inputPngBuffer)
+        sharp(fixtures.inputPng)
           .resize(width, height)
           .png({ progressive: true })
           .toBuffer(function (err, buffer) {
@@ -533,7 +257,7 @@ async.series({
     }).add('sharp-withoutAdaptiveFiltering', {
       defer: true,
       fn: function (deferred) {
-        sharp(inputPngBuffer)
+        sharp(fixtures.inputPng)
           .resize(width, height)
           .png({ adaptiveFiltering: false })
           .toBuffer(function (err, buffer) {
@@ -552,37 +276,95 @@ async.series({
       callback(null, this.filter('fastest').map('name'));
     }).run();
   },
+  // ======== GIF SUITE ========
+  'gif': function (callback) {
+    const inputGifBuffer = fs.readFileSync(fixtures.inputGif);
+    const gifSuite = new Benchmark.Suite('png');
+    // jimp
+    gifSuite.add('jimp-file-file', {
+      defer: true,
+      fn: function (deferred) {
+        jimp.read(fixtures.inputGif, function (err, image) {
+          if (err) {
+            throw err;
+          } else {
+            image
+              .resize(width, height)
+              .quality(quality_factor)
+              .write(fixtures.outputGif, function (err) {
+                if (err) {
+                  throw err;
+                } else {
+                  deferred.resolve();
+                }
+              });
+          }
+        });
+      }
+    })
+    if (typeof lwip !== 'undefined') {
+      gifSuite.add('lwip-file-file', {
+        defer: true,
+        fn: function (deferred) {
+          lwip.open(fixtures.inputGif, function (err, image) {
+            if (err) {
+              throw err;
+            }
+            image.resize(width, height, 'lanczos', function (err, image) {
+              if (err) {
+                throw err;
+              }
+              image.writeFile(fixtures.outputGif, {quality: quality_factor}, function (err) {
+                if (err) {
+                  throw err;
+                }
+                deferred.resolve();
+              });
+            });
+          });
+        }
+      })
+    }
+    // gm
+    gifSuite.add('gm-file-file', {
+      defer: true,
+      fn: function (deferred) {
+        gm(fixtures.inputGif)
+          .filter('Lanczos')
+          .resize(width, height)
+          .write(fixtures.outputGif, function (err) {
+            if (err) {
+              throw err;
+            } else {
+              deferred.resolve();
+            }
+          });
+      }
+    })
+    //sharp
+    gifSuite.add('sharp-file-file', {
+      defer: true,
+      fn: function (deferred) {
+        sharp(fixtures.inputGif)
+          .resize(width, height)
+          .toFile(fixtures.outputGif, function (err) {
+            if (err) {
+              throw err;
+            } else {
+              deferred.resolve();
+            }
+          });
+      }
+    }).on('cycle', function (event) {
+      console.log(' gif ' + String(event.target));
+    }).on('complete', function () {
+      callback(null, this.filter('fastest').map('name'));
+    }).run();
+  },
   // ======== WEBP SUITE ========
   'webp': function (callback) {
     const inputWebPBuffer = fs.readFileSync(fixtures.inputWebP);
-    (new Benchmark.Suite('webp')).add('sharp-buffer-file', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputWebPBuffer)
-          .resize(width, height)
-          .toFile(fixtures.outputWebP, function (err) {
-            if (err) {
-              throw err;
-            } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-buffer-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(inputWebPBuffer)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-file-file', {
+    (new Benchmark.Suite('webp')).add('sharp-file-file', {
       defer: true,
       fn: function (deferred) {
         sharp(fixtures.inputWebP)
@@ -591,20 +373,6 @@ async.series({
             if (err) {
               throw err;
             } else {
-              deferred.resolve();
-            }
-          });
-      }
-    }).add('sharp-file-buffer', {
-      defer: true,
-      fn: function (deferred) {
-        sharp(fixtures.inputWebp)
-          .resize(width, height)
-          .toBuffer(function (err, buffer) {
-            if (err) {
-              throw err;
-            } else {
-              assert.notStrictEqual(null, buffer);
               deferred.resolve();
             }
           });
