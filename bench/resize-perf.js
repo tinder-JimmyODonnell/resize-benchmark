@@ -143,7 +143,7 @@ async.series({
   },
   // ======== PNG SUITE ========
   'png': function (callback) {
-    const inputPngBuffer = fs.readFileSync(fixtures.inputPng);
+    //const inputPngBuffer = fs.readFileSync(fixtures.inputPng);
     const pngSuite = new Benchmark.Suite('png');
     // jimp
     pngSuite.add('jimp-file-file', {
@@ -278,30 +278,8 @@ async.series({
   },
   // ======== GIF SUITE ========
   'gif': function (callback) {
-    const inputGifBuffer = fs.readFileSync(fixtures.inputGif);
+    //const inputGifBuffer = fs.readFileSync(fixtures.inputGif);
     const gifSuite = new Benchmark.Suite('png');
-    // jimp
-    gifSuite.add('jimp-file-file', {
-      defer: true,
-      fn: function (deferred) {
-        jimp.read(fixtures.inputGif, function (err, image) {
-          if (err) {
-            throw err;
-          } else {
-            image
-              .resize(width, height)
-              .quality(quality_factor)
-              .write(fixtures.outputGif, function (err) {
-                if (err) {
-                  throw err;
-                } else {
-                  deferred.resolve();
-                }
-              });
-          }
-        });
-      }
-    })
     if (typeof lwip !== 'undefined') {
       gifSuite.add('lwip-file-file', {
         defer: true,
@@ -363,7 +341,6 @@ async.series({
   },
   // ======== WEBP SUITE ========
   'webp': function (callback) {
-    const inputWebPBuffer = fs.readFileSync(fixtures.inputWebP);
     (new Benchmark.Suite('webp')).add('sharp-file-file', {
       defer: true,
       fn: function (deferred) {
@@ -379,6 +356,26 @@ async.series({
       }
     }).on('cycle', function (event) {
       console.log('webp ' + String(event.target));
+    }).on('complete', function () {
+      callback(null, this.filter('fastest').map('name'));
+    }).run();
+  },
+  'tiff': function (callback) {
+    (new Benchmark.Suite('tiff')).add('sharp-file-file', {
+      defer: true,
+      fn: function (deferred) {
+        sharp(fixtures.inputTiff)
+          .resize(width, height)
+          .toFile(fixtures.outputTiff, function (err) {
+            if (err) {
+              throw err;
+            } else {
+              deferred.resolve();
+            }
+          });
+      }
+    }).on('cycle', function (event) {
+      console.log('tiff ' + String(event.target));
     }).on('complete', function () {
       callback(null, this.filter('fastest').map('name'));
     }).run();

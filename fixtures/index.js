@@ -18,7 +18,7 @@ module.exports = {
   outputJpgLarge: getPath('outputLarge.jpg'),
   outputPng: getPath('output.png'),
   outputWebP: getPath('output.webp'),
-  outputTiff: getPath('output.tiff'),
+  outputTiff: getPath('output.tif'),
   outputGif: getPath('output.gif'),
   path: getPath
 };
