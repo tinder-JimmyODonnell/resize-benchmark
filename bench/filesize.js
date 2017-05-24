@@ -234,6 +234,7 @@ addTest('sharp-resize-0.5-mozjpeg', test, sharpResizeTo(0.50), useMozjpeg);
 addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.75), useGuetzli);
 addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
 
+console.log('--- Compare file size ratios for resizing, QF, encodings ---');
 test.go(() => {
   console.log('done');
 });

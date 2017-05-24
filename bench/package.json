@@ -5,7 +5,7 @@
   "author": "Jimmy O'Donnell <jimmy.odonnell@gotinder.com>",
   "description": "Modified perf comparison of sharp, graphicsmagick, others",
   "scripts": {
-    "test": "VIPS_WARNING=0 node resize-perf"
+    "test": "VIPS_WARNING=0 node resize-perf && node filesize"
   },
   "devDependencies": {
     "async": "^2.1.4",
