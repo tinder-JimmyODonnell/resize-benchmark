@@ -31,7 +31,7 @@ sharp.cache(false);
 // Enable use of SIMD
 sharp.simd(true);
 
-console.log('--- Compare perf: jimp, lwip, gm, im, sharp ---');
+console.log('--- Compare resize perf: jimp, lwip, gm, im, sharp ---');
 async.series({
   // ======== JPEG SUITE ========
   'jpeg': function (callback) {

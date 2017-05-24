@@ -209,17 +209,29 @@ var addTest = function (name, middleware, fn1, fn2) {
 
 // create and run the tests
 
+if (typeof TEST_IN === 'undefined') {
+  throw new Error('Must specify location of test images: $ node filesize path_to_images');
+} else if (!fs.existsSync(TEST_IN)) {
+  throw new Error('Directory does not exist: ' + TEST_IN);
+}
+
 var test = new Middleware();
 
 // resize tests 10% --> 100%
 addTest('sharp-resize-' + 1.00, test, sharpResizeTo(1.00));
 addTest('sharp-resize-' + 0.90, test, sharpResizeTo(0.90));
+addTest('sharp-resize-' + 0.80, test, sharpResizeTo(0.80));
 addTest('sharp-resize-' + 0.70, test, sharpResizeTo(0.70));
+addTest('sharp-resize-' + 0.60, test, sharpResizeTo(0.60));
 addTest('sharp-resize-' + 0.50, test, sharpResizeTo(0.50));
+addTest('sharp-resize-' + 0.40, test, sharpResizeTo(0.40));
 addTest('sharp-resize-' + 0.30, test, sharpResizeTo(0.30));
+addTest('sharp-resize-' + 0.20, test, sharpResizeTo(0.20));
 addTest('sharp-resize-' + 0.10, test, sharpResizeTo(0.10));
 // quality factor tests
+addTest('qf-100', test, jimpQualityTo(1.00));
 addTest('qf-99', test, jimpQualityTo(0.99));
+addTest('qf-98', test, jimpQualityTo(0.98));
 addTest('qf-95', test, jimpQualityTo(0.95));
 addTest('qf-90', test, jimpQualityTo(0.90));
 addTest('qf-80', test, jimpQualityTo(0.80));
@@ -231,7 +243,7 @@ addTest('guetzli', test, useGuetzli);
 // combination tests
 addTest('sharp-resize-0.75-mozjpeg', test, sharpResizeTo(0.75), useMozjpeg);
 addTest('sharp-resize-0.5-mozjpeg', test, sharpResizeTo(0.50), useMozjpeg);
-addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.75), useGuetzli);
+addTest('sharp-resize-0.75-guetzli', test, sharpResizeTo(0.75), useGuetzli);
 addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
 
 console.log('--- Compare file size ratios for resizing, QF, encodings ---');
