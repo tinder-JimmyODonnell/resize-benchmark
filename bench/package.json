@@ -27,4 +27,12 @@
   "engines": {
     "node": ">=4"
   },
+  "dependencies": {
+    "imagemin": "^5.3.1",
+    "imagemin-gifsicle": "^5.1.0",
+    "imagemin-guetzli": "^1.0.0",
+    "imagemin-jpegtran": "^5.0.2",
+    "imagemin-mozjpeg": "^6.0.0",
+    "imagemin-pngquant": "^5.0.0"
+  }
 }

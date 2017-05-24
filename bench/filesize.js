@@ -1,29 +1,39 @@
 'use strict';
 
+// handle test files
 const fs = require('fs-extra');
 const path = require('path');
+// manipulate images
 const jimp = require('jimp');
 const isize = require('image-size');
+// structure for tests
+const Middleware = require('./middleware');
+// encoders
+const imagemin = require('imagemin');
+const jpegtran = require('imagemin-jpegtran');
+const mozjpeg = require('imagemin-mozjpeg');
+const guetzli = require('imagemin-guetzli');
+const execFile = require('child_process').execFile;
 
-const TEST_IN = process.argv[2];
-const TEST_DIR = './test_temp';
+const TEST_IN = process.argv[2];  // dir where test images are stored
+const TEST_DIR = './test_temp';   // temporary dir for manipulating images
 
 var AVG_BEFORE; // TODO make these not global
 var AVG_AFTER;
 
 // set up the test
 
-var setup = function (next) {
+var setup = function (callback) {
   fs.mkdir(TEST_DIR, () => {
     fs.copy(TEST_IN, TEST_DIR).then(() => {
-      next();
+      callback();
     });
   });
 }
 
-var teardown = function () {
+var teardown = function (callback) {
   fs.remove(TEST_DIR, () => {
-    //console.log('teardown complete');
+    callback();
   });
 }
 
@@ -55,7 +65,7 @@ var getSizeAvg = function(dir) {
 // procedures
 
 var resizeTo = function (factor) {
-  return function (filename, next) {
+  return function (filename) {
     return new Promise((resolve, reject) => {
       jimp.read(filename, function (err, image) {
         if (err) {
@@ -79,7 +89,7 @@ var resizeTo = function (factor) {
 }
 
 var qualityTo = function (factor) {
-  return function (filename, next) {
+  return function (filename) {
     return new Promise((resolve, reject) => {
       jimp.read(filename, function (err, image) {
         if (err) {
@@ -100,9 +110,39 @@ var qualityTo = function (factor) {
   };
 }
 
+var useLibjpeg = function (quality) {
+  return function (filename) {
+    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+      plugins: [
+        jpegtran()
+      ]
+    });
+  }
+}
+
+var useMozjpeg = function (quality) {
+  return function (filename) {
+    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+      plugins: [
+        mozjpeg()
+      ]
+    });
+  }
+}
+
+var useGuetzli = function (quality) {
+  return function (filename) {
+    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+      plugins: [
+        guetzli()
+      ]
+    });
+  }
+}
+
 // the test
 
-var test = function (fn, next) {
+var applyFn = function (fn, callback) {
   getSizeAvg(TEST_DIR).then((avg) => {
     AVG_BEFORE = avg;
   });
@@ -113,8 +153,7 @@ var test = function (fn, next) {
       return fn(file).then(() => {
         return;
       }).catch((err) => {
-        //console.log('failed');
-        //console.log(err);
+        console.log('function failed: ' + err);
       });
     }));
   }).then((results) => {
@@ -122,22 +161,48 @@ var test = function (fn, next) {
       AVG_AFTER = avg
       console.log('ratio: ' + (AVG_AFTER / AVG_BEFORE).toString());
     });
-    next();
+    callback();
   }).catch((err) => {
-    //console.log('FAILED');
+    console.log('readdirAsync failed: ' + err);
   });
 }
 
-if ((typeof process.argv[2] === 'undefined')
-  || (typeof process.argv[3] === 'undefined')) {
-  throw new Error('usage: node filesize path_to_test_images factor');
+var addTest = function (name, middleware, fn) {
+  middleware.use((next) => {
+    setup(next);
+  });
+  middleware.use((next) => {
+    console.time(name)
+    applyFn(fn, next);
+  });
+  middleware.use((next) => {
+    console.timeEnd(name);
+    teardown(next);
+  })
 }
 
-// run
-// TODO automate this to run for all desired resize/quality factors in sequence
-console.log('--- factor: ' + process.argv[3] + ' ---')
-setup(() => {
-  test(qualityTo(process.argv[3]), () => {
-    teardown();
-  })
+// create and run the test
+
+var test = new Middleware();
+
+/*test.use((next) => {
+  console.log('first setup')
+  setup(next);
+});
+
+test.use((next) => {
+  applyFn(useGuetzli(5), next);
+});
+*/
+addTest('resize-50%', test, resizeTo(0.5));
+addTest('qf-50', test, qualityTo(0.5));
+addTest('mozjpeg', test, useMozjpeg(1));
+/*
+test.use((next) => {
+  console.log('last teardown')
+  teardown(next);
+});*/
+
+test.go(() => {
+  console.log('done');
 });
