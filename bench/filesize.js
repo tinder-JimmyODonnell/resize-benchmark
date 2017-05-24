@@ -5,6 +5,7 @@ const fs = require('fs-extra');
 const path = require('path');
 // manipulate images
 const jimp = require('jimp');
+const sharp = require('sharp');
 const isize = require('image-size');
 // structure for tests
 const Middleware = require('./middleware');
@@ -64,7 +65,7 @@ var getSizeAvg = function(dir) {
 
 // procedures
 
-var resizeTo = function (factor) {
+var jimpResizeTo = function (factor) {
   return function (filename) {
     return new Promise((resolve, reject) => {
       jimp.read(filename, function (err, image) {
@@ -88,7 +89,30 @@ var resizeTo = function (factor) {
   };
 }
 
-var qualityTo = function (factor) {
+var sharpResizeTo = function (factor) {
+  return function (filename) {
+    return new Promise((resolve, reject) => {
+      var newWidth = Math.trunc(isize(filename).width * factor);
+      var newHeight = Math.trunc(isize(filename).height * factor);
+      fs.rename(filename, filename + 'temp', () => {
+        sharp(filename + 'temp')
+          .resize(newWidth, newHeight)
+          .toFile(filename, (err) => {
+            if (err) {
+              reject(err);
+              console.log(err);
+            } else {
+              fs.remove(filename + 'temp', () => {
+                resolve();
+              })
+            }
+        });
+      });
+    });
+  };
+}
+
+var jimpQualityTo = function (factor) {
   return function (filename) {
     return new Promise((resolve, reject) => {
       jimp.read(filename, function (err, image) {
@@ -110,50 +134,52 @@ var qualityTo = function (factor) {
   };
 }
 
-var useLibjpeg = function (quality) {
-  return function (filename) {
-    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
-      plugins: [
-        jpegtran()
-      ]
-    });
-  }
+var useLibjpeg = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      jpegtran()
+    ]
+  });
 }
 
-var useMozjpeg = function (quality) {
-  return function (filename) {
-    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
-      plugins: [
-        mozjpeg()
-      ]
-    });
-  }
+var useMozjpeg = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      mozjpeg()
+    ]
+  });
 }
 
-var useGuetzli = function (quality) {
-  return function (filename) {
-    return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
-      plugins: [
-        guetzli()
-      ]
-    });
-  }
+var useGuetzli = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      guetzli()
+    ]
+  });
 }
 
-// the test
+// define test structure and iteration
 
-var applyFn = function (fn, callback) {
+var applyFn = function (fn1, fn2, callback) {
   getSizeAvg(TEST_DIR).then((avg) => {
     AVG_BEFORE = avg;
   });
 
   readdirAsync(TEST_DIR).then((list) => {
     return Promise.all(list.map((file) => {
+      if (file === '.DS_Store') { return; }
       file = path.resolve(TEST_DIR, file);
-      return fn(file).then(() => {
-        return;
+      return fn1(file).then(() => {
+        if (typeof fn2 !== 'undefined') {
+          return fn2(file).then(() => {
+            return;
+          });
+        } else {
+          return;
+        }
       }).catch((err) => {
         console.log('function failed: ' + err);
+        // TODO .DS_Store causes this to spit out false alarms
       });
     }));
   }).then((results) => {
@@ -167,13 +193,13 @@ var applyFn = function (fn, callback) {
   });
 }
 
-var addTest = function (name, middleware, fn) {
+var addTest = function (name, middleware, fn1, fn2) {
   middleware.use((next) => {
     setup(next);
   });
   middleware.use((next) => {
     console.time(name)
-    applyFn(fn, next);
+    applyFn(fn1, fn2, next);
   });
   middleware.use((next) => {
     console.timeEnd(name);
@@ -181,27 +207,32 @@ var addTest = function (name, middleware, fn) {
   })
 }
 
-// create and run the test
+// create and run the tests
 
 var test = new Middleware();
 
-/*test.use((next) => {
-  console.log('first setup')
-  setup(next);
-});
-
-test.use((next) => {
-  applyFn(useGuetzli(5), next);
-});
-*/
-addTest('resize-50%', test, resizeTo(0.5));
-addTest('qf-50', test, qualityTo(0.5));
-addTest('mozjpeg', test, useMozjpeg(1));
-/*
-test.use((next) => {
-  console.log('last teardown')
-  teardown(next);
-});*/
+// resize tests 10% --> 100%
+addTest('sharp-resize-' + 1.00, test, sharpResizeTo(1.00));
+addTest('sharp-resize-' + 0.90, test, sharpResizeTo(0.90));
+addTest('sharp-resize-' + 0.70, test, sharpResizeTo(0.70));
+addTest('sharp-resize-' + 0.50, test, sharpResizeTo(0.50));
+addTest('sharp-resize-' + 0.30, test, sharpResizeTo(0.30));
+addTest('sharp-resize-' + 0.10, test, sharpResizeTo(0.10));
+// quality factor tests
+addTest('qf-99', test, jimpQualityTo(0.99));
+addTest('qf-95', test, jimpQualityTo(0.95));
+addTest('qf-90', test, jimpQualityTo(0.90));
+addTest('qf-80', test, jimpQualityTo(0.80));
+addTest('qf-50', test, jimpQualityTo(0.50));
+// encoder tests
+addTest('libjpeg', test, useLibjpeg);
+addTest('mozjpeg', test, useMozjpeg);
+addTest('guetzli', test, useGuetzli);
+// combination tests
+addTest('sharp-resize-0.75-mozjpeg', test, sharpResizeTo(0.75), useMozjpeg);
+addTest('sharp-resize-0.5-mozjpeg', test, sharpResizeTo(0.50), useMozjpeg);
+addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.75), useGuetzli);
+addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
 
 test.go(() => {
   console.log('done');
