@@ -140,6 +140,23 @@ var jimpQualityTo = function (factor) {
   };
 }
 
+var gmQualityTo = function (factor) {
+  return function (filename) {
+    return new Promise((resolve, reject) => {
+      gm(filename)
+        .quality(factor * 100)
+        .write(filename, function (err) {
+          if (err) {
+            console.log('gmQualityTo failed');
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+    });
+  };
+}
+
 var useLibjpeg = function (filename) {
   return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
     plugins: [
@@ -295,14 +312,26 @@ addTest('sharp-resize-' + 0.40, test, sharpResizeTo(0.40));
 addTest('sharp-resize-' + 0.30, test, sharpResizeTo(0.30));
 addTest('sharp-resize-' + 0.20, test, sharpResizeTo(0.20));
 addTest('sharp-resize-' + 0.10, test, sharpResizeTo(0.10));
-// quality factor tests
-addTest('qf-100', test, jimpQualityTo(1.00));
-addTest('qf-99', test, jimpQualityTo(0.99));
-addTest('qf-98', test, jimpQualityTo(0.98));
-addTest('qf-95', test, jimpQualityTo(0.95));
-addTest('qf-90', test, jimpQualityTo(0.90));
-addTest('qf-80', test, jimpQualityTo(0.80));
-addTest('qf-50', test, jimpQualityTo(0.50));
+// gm quality factor tests
+addTest('gm-qf-100', test, gmQualityTo(1.00));
+addTest('gm-qf-99', test, gmQualityTo(0.99));
+addTest('gm-qf-98', test, gmQualityTo(0.98));
+addTest('gm-qf-95', test, gmQualityTo(0.95));
+addTest('gm-qf-90', test, gmQualityTo(0.90));
+addTest('gm-qf-80', test, gmQualityTo(0.80));
+addTest('gm-qf-70', test, gmQualityTo(0.70));
+addTest('gm-qf-50', test, gmQualityTo(0.50));
+addTest('gm-qf-25', test, gmQualityTo(0.25));
+addTest('gm-qf-10', test, gmQualityTo(0.10));
+// jimp quality factor tests
+addTest('jimp-qf-100', test, jimpQualityTo(1.00));
+addTest('jimp-qf-99', test, jimpQualityTo(0.99));
+addTest('jimp-qf-98', test, jimpQualityTo(0.98));
+addTest('jimp-qf-95', test, jimpQualityTo(0.95));
+addTest('jimp-qf-90', test, jimpQualityTo(0.90));
+addTest('jimp-qf-80', test, jimpQualityTo(0.80));
+addTest('jimp-qf-50', test, jimpQualityTo(0.50));
+/*
 // encoder tests
 addTest('libjpeg', test, useLibjpeg);
 addTest('mozjpeg', test, useMozjpeg);
@@ -314,6 +343,7 @@ addTest('sharp-resize-0.75-guetzli', test, sharpResizeTo(0.75), useGuetzli);
 addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
 // PNG tests
 addTest('pngquant', test, usePngquant);
+addTest('gm-tojpg', test, gmToJpg);
 addTest('gm-tojpg-mozjpeg', test, gmToJpg, useMozjpeg);
 addTest('sharp-tojpg-mozjpeg', test, sharpToJpg, useMozjpeg);
 addTest('pngquant-gm-tojpg', test, usePngquant, gmToJpg);
