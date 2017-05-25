@@ -3,9 +3,11 @@
 // handle test files
 const fs = require('fs-extra');
 const path = require('path');
+const replaceExt = require('replace-ext');
 // manipulate images
 const jimp = require('jimp');
 const sharp = require('sharp');
+const gm = require('gm');
 const isize = require('image-size');
 // structure for tests
 const Middleware = require('./middleware');
@@ -14,6 +16,9 @@ const imagemin = require('imagemin');
 const jpegtran = require('imagemin-jpegtran');
 const mozjpeg = require('imagemin-mozjpeg');
 const guetzli = require('imagemin-guetzli');
+const pngquant = require('imagemin-pngquant');
+const optipng = require('imagemin-optipng');
+const pngcrush = require('imagemin-pngcrush');
 const execFile = require('child_process').execFile;
 
 const TEST_IN = process.argv[2];  // dir where test images are stored
@@ -78,6 +83,7 @@ var jimpResizeTo = function (factor) {
             .resize(newWidth, newHeight)
             .write(filename, function (err) {
               if (err) {
+                console.log('jimpResize failed');
                 reject(err);
               } else {
                 resolve();
@@ -99,8 +105,8 @@ var sharpResizeTo = function (factor) {
           .resize(newWidth, newHeight)
           .toFile(filename, (err) => {
             if (err) {
+              console.log('sharpResize failed');
               reject(err);
-              console.log(err);
             } else {
               fs.remove(filename + 'temp', () => {
                 resolve();
@@ -158,6 +164,62 @@ var useGuetzli = function (filename) {
   });
 }
 
+var usePngcrush = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      pngcrush()
+    ]
+  });
+}
+
+var usePngquant = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      pngquant({ quality: '100' })
+    ]
+  });
+}
+
+var useOptipng = function (filename) {
+  return imagemin([path.resolve(TEST_DIR, filename)], TEST_DIR, {
+    plugins: [
+      optipng()
+    ]
+  });
+}
+
+var sharpToJpg = function (filename) {
+  return new Promise((resolve, reject) => {
+    sharp(filename)
+      .toFile(replaceExt(filename, '.jpg'), (err) => {
+        if (err) {
+          console.log('sharpToJpg failed');
+          reject(err);
+        } else {
+          fs.remove(filename, () => {
+            resolve();
+          });
+        }
+    });
+  });
+}
+
+var gmToJpg = function (filename) {
+  return new Promise((resolve, reject) => {
+    gm(filename)
+      .write(replaceExt(filename, '.jpg'), function (err) {
+        if (err) {
+          console.log('gmToJpg failed');
+          reject(err);
+        } else {
+          fs.remove(filename, () => {
+            resolve();
+          });
+        }
+      });
+  });
+}
+
 // define test structure and iteration
 
 var applyFn = function (fn1, fn2, callback) {
@@ -170,6 +232,10 @@ var applyFn = function (fn1, fn2, callback) {
       if (file === '.DS_Store') { return; }
       file = path.resolve(TEST_DIR, file);
       return fn1(file).then(() => {
+        if (fn1 === sharpToJpg || fn1 === gmToJpg) {
+          file = replaceExt(file, '.png');
+        }
+
         if (typeof fn2 !== 'undefined') {
           return fn2(file).then(() => {
             return;
@@ -217,6 +283,7 @@ if (typeof TEST_IN === 'undefined') {
 
 var test = new Middleware();
 
+/*
 // resize tests 10% --> 100%
 addTest('sharp-resize-' + 1.00, test, sharpResizeTo(1.00));
 addTest('sharp-resize-' + 0.90, test, sharpResizeTo(0.90));
@@ -245,6 +312,12 @@ addTest('sharp-resize-0.75-mozjpeg', test, sharpResizeTo(0.75), useMozjpeg);
 addTest('sharp-resize-0.5-mozjpeg', test, sharpResizeTo(0.50), useMozjpeg);
 addTest('sharp-resize-0.75-guetzli', test, sharpResizeTo(0.75), useGuetzli);
 addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
+// PNG tests
+addTest('pngquant', test, usePngquant);
+addTest('gm-tojpg-mozjpeg', test, gmToJpg, useMozjpeg);
+addTest('sharp-tojpg-mozjpeg', test, sharpToJpg, useMozjpeg);
+addTest('pngquant-gm-tojpg', test, usePngquant, gmToJpg);
+*/
 
 console.log('--- Compare file size ratios for resizing, QF, encodings ---');
 test.go(() => {
