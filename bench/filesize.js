@@ -37,7 +37,7 @@ var setup = function (callback) {
   });
 }
 
-var teardown = function (callback) {
+var teardown = function (callback, name) {
   fs.remove(TEST_DIR, () => {
     callback();
   });
@@ -95,7 +95,7 @@ var jimpResizeTo = function (factor) {
   };
 }
 
-var sharpResizeTo = function (factor) {
+var sharpResizeToFactor = function (factor) {
   return function (filename) {
     return new Promise((resolve, reject) => {
       var newWidth = Math.trunc(isize(filename).width * factor);
@@ -118,6 +118,44 @@ var sharpResizeTo = function (factor) {
   };
 }
 
+var sharpResizeToDims = function (w, h) {
+  return function (filename) {
+    return new Promise((resolve, reject) => {
+      fs.rename(filename, filename + 'temp', () => {
+        sharp(filename + 'temp')
+          .resize(w, h)
+          .toFile(filename, (err) => {
+            if (err) {
+              console.log('sharpResize failed');
+              reject(err);
+            } else {
+              fs.remove(filename + 'temp', () => {
+                resolve();
+              })
+            }
+        });
+      });
+    });
+  };
+}
+
+var gmResizeToDims = function (w, h) {
+  return function (filename) {
+    return new Promise((resolve, reject) => {
+      gm(filename)
+        .resize(w, h)
+        .write(filename, function (err) {
+          if (err) {
+            console.log('gmResizeToDims failed');
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+    });
+  };
+}
+
 var jimpQualityTo = function (factor) {
   return function (filename) {
     return new Promise((resolve, reject) => {
@@ -126,7 +164,7 @@ var jimpQualityTo = function (factor) {
           reject(err);
         } else {
           image
-            .quality(factor * 100)
+            .quality(factor)
             .write(filename, function (err) {
               if (err) {
                 reject(err);
@@ -144,7 +182,7 @@ var gmQualityTo = function (factor) {
   return function (filename) {
     return new Promise((resolve, reject) => {
       gm(filename)
-        .quality(factor * 100)
+        .quality(factor)
         .write(filename, function (err) {
           if (err) {
             console.log('gmQualityTo failed');
@@ -239,7 +277,7 @@ var gmToJpg = function (filename) {
 
 // define test structure and iteration
 
-var applyFn = function (fn1, fn2, callback) {
+var applyFn = function (fns, callback) {
   getSizeAvg(TEST_DIR).then((avg) => {
     AVG_BEFORE = avg;
   });
@@ -248,22 +286,54 @@ var applyFn = function (fn1, fn2, callback) {
     return Promise.all(list.map((file) => {
       if (file === '.DS_Store') { return; }
       file = path.resolve(TEST_DIR, file);
-      return fn1(file).then(() => {
-        if (fn1 === sharpToJpg || fn1 === gmToJpg) {
-          file = replaceExt(file, '.png');
-        }
 
-        if (typeof fn2 !== 'undefined') {
-          return fn2(file).then(() => {
-            return;
-          });
-        } else {
-          return;
-        }
+      // https://stackoverflow.com/questions/17757654/how-to-chain-a-variable-number-of-promises-in-q-in-order
+      // why doesn't this work?
+      /*return fns.reduce((prev, fn) => {
+        return fn(file).then(() => {
+          if (fn === sharpToJpg || fn === gmToJpg) {
+            console.log('converting file extension');
+            file = replaceExt(file, '.jpg');
+            return prev;
+          }
+          console.log('processed ' + file);
+          return prev;
+        });
+      }, () => {}).then(() => {
+        console.log('end of chain');
+        return;
       }).catch((err) => {
-        console.log('function failed: ' + err);
-        // TODO .DS_Store causes this to spit out false alarms
-      });
+        console.log('chain failed: ' + err);
+      });*/
+
+      // this is really really bad but chaining isn't working
+
+      if (typeof fns[0] !== 'undefined') {
+        return fns[0](file).then(() => {
+          if (fns[0] === sharpToJpg || fns[0] === gmToJpg) {
+            file = replaceExt(file, '.jpg');
+          }
+          if (typeof fns[1] !== 'undefined') {
+            return fns[1](file).then(() => {
+              if (fns[1] === sharpToJpg || fns[1] === gmToJpg) {
+                file = replaceExt(file, '.jpg');
+              }
+              if (typeof fns[2] !== 'undefined') {
+                return fns[2](file).then(() => {
+                  if (fns[2] === sharpToJpg || fns[2] === gmToJpg) {
+                    file = replaceExt(file, '.jpg');
+                  }
+                  if (typeof fns[3] !== 'undefined') {
+                    return fns[3](file).then(() => {
+                      return;
+                    })
+                  } else return;
+                })
+              } else return;
+            })
+          } else return;
+        })
+      } else return;
     }));
   }).then((results) => {
     getSizeAvg(TEST_DIR).then((avg) => {
@@ -276,17 +346,17 @@ var applyFn = function (fn1, fn2, callback) {
   });
 }
 
-var addTest = function (name, middleware, fn1, fn2) {
+var addTest = function (name, middleware, fns) {
   middleware.use((next) => {
     setup(next);
   });
   middleware.use((next) => {
     console.time(name)
-    applyFn(fn1, fn2, next);
+    applyFn(fns, next)
   });
   middleware.use((next) => {
     console.timeEnd(name);
-    teardown(next);
+    teardown(next, name);
   })
 }
 
@@ -300,54 +370,15 @@ if (typeof TEST_IN === 'undefined') {
 
 var test = new Middleware();
 
-/*
-// resize tests 10% --> 100%
-addTest('sharp-resize-' + 1.00, test, sharpResizeTo(1.00));
-addTest('sharp-resize-' + 0.90, test, sharpResizeTo(0.90));
-addTest('sharp-resize-' + 0.80, test, sharpResizeTo(0.80));
-addTest('sharp-resize-' + 0.70, test, sharpResizeTo(0.70));
-addTest('sharp-resize-' + 0.60, test, sharpResizeTo(0.60));
-addTest('sharp-resize-' + 0.50, test, sharpResizeTo(0.50));
-addTest('sharp-resize-' + 0.40, test, sharpResizeTo(0.40));
-addTest('sharp-resize-' + 0.30, test, sharpResizeTo(0.30));
-addTest('sharp-resize-' + 0.20, test, sharpResizeTo(0.20));
-addTest('sharp-resize-' + 0.10, test, sharpResizeTo(0.10));
-// gm quality factor tests
-addTest('gm-qf-100', test, gmQualityTo(1.00));
-addTest('gm-qf-99', test, gmQualityTo(0.99));
-addTest('gm-qf-98', test, gmQualityTo(0.98));
-addTest('gm-qf-95', test, gmQualityTo(0.95));
-addTest('gm-qf-90', test, gmQualityTo(0.90));
-addTest('gm-qf-80', test, gmQualityTo(0.80));
-addTest('gm-qf-70', test, gmQualityTo(0.70));
-addTest('gm-qf-50', test, gmQualityTo(0.50));
-addTest('gm-qf-25', test, gmQualityTo(0.25));
-addTest('gm-qf-10', test, gmQualityTo(0.10));
-// jimp quality factor tests
-addTest('jimp-qf-100', test, jimpQualityTo(1.00));
-addTest('jimp-qf-99', test, jimpQualityTo(0.99));
-addTest('jimp-qf-98', test, jimpQualityTo(0.98));
-addTest('jimp-qf-95', test, jimpQualityTo(0.95));
-addTest('jimp-qf-90', test, jimpQualityTo(0.90));
-addTest('jimp-qf-80', test, jimpQualityTo(0.80));
-addTest('jimp-qf-50', test, jimpQualityTo(0.50));
-/*
-// encoder tests
-addTest('libjpeg', test, useLibjpeg);
-addTest('mozjpeg', test, useMozjpeg);
-addTest('guetzli', test, useGuetzli);
-// combination tests
-addTest('sharp-resize-0.75-mozjpeg', test, sharpResizeTo(0.75), useMozjpeg);
-addTest('sharp-resize-0.5-mozjpeg', test, sharpResizeTo(0.50), useMozjpeg);
-addTest('sharp-resize-0.75-guetzli', test, sharpResizeTo(0.75), useGuetzli);
-addTest('sharp-resize-0.5-guetzli', test, sharpResizeTo(0.50), useGuetzli);
-// PNG tests
-addTest('pngquant', test, usePngquant);
-addTest('gm-tojpg', test, gmToJpg);
-addTest('gm-tojpg-mozjpeg', test, gmToJpg, useMozjpeg);
-addTest('sharp-tojpg-mozjpeg', test, sharpToJpg, useMozjpeg);
-addTest('pngquant-gm-tojpg', test, usePngquant, gmToJpg);
-*/
+// combo tests
+//addTest('resize-qf-optimize', test, [sharpResizeToDims(640, 640), gmQualityTo(75), useMozjpeg]);
+//addTest('resize-qf-optimize', test, [sharpResizeToDims(640, 640), gmQualityTo(75)]);
+//addTest('resize-qf-optimize', test, [sharpResizeToDims(640, 640)]);
+//addTest('resize-qf-optimize', test, [useMozjpeg]);
+
+addTest('sharp-resize-gm-qf', test, [sharpResizeToDims(640, 640), gmQualityTo(75)]);
+addTest('gm-resize-gm-qf', test, [gmResizeToDims(640, 640), gmQualityTo(75)]);
+
 
 console.log('--- Compare file size ratios for resizing, QF, encodings ---');
 test.go(() => {
